@@ -8,7 +8,7 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: 'karibu-grocerie.netlify.app' }));
+app.use(cors({ origin: 'karibu-groceries.netlify.app' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
