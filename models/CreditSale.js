@@ -1,4 +1,6 @@
+// This model stores sales where the buyer pays later.
 const mongoose = require('mongoose');
+const { ALLOWED_PRODUCE } = require('../constants/produce');
 
 const creditSaleSchema = new mongoose.Schema({
   buyerName: {
@@ -46,7 +48,7 @@ const creditSaleSchema = new mongoose.Schema({
     type: String,
     required: true,
     minlength: [2, 'Produce name must be at least 2 characters'],
-    match: [/^[a-zA-Z0-9\s]+$/, 'Produce name must be alpha-numeric'],
+    enum: ALLOWED_PRODUCE,
     trim: true
   },
   produceType: {
@@ -58,6 +60,12 @@ const creditSaleSchema = new mongoose.Schema({
   },
   tonnage: {
     type: Number,
+    required: true,
+    min: [0.01, 'Tonnage must be greater than 0kg']
+  },
+  branch: {
+    type: String,
+    enum: ['Maganjo', 'Matugga'],
     required: true
   },
   dispatchDate: {

@@ -1,3 +1,4 @@
+// This model stores system users like managers, agents, and the director.
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
@@ -5,7 +6,6 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    unque: true,
   },
   role: {
     type: String,

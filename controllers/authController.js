@@ -1,3 +1,4 @@
+// This controller handles registering users and logging them in.
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -8,6 +9,10 @@ const jwt = require('jsonwebtoken');
 exports.registerUser = async (req, res) => {
   try {
     const { name, role, branch, password } = req.body;
+
+    if (role === 'Director' && name.trim().toLowerCase() !== 'mr. orban') {
+      return res.status(403).json({ message: 'Only Mr. Orban can be registered as Director' });
+    }
 
     // Check if user exists
     const userExists = await User.findOne({ name, role });
@@ -48,6 +53,10 @@ exports.registerUser = async (req, res) => {
 exports.loginUser = async (req, res) => {
   try {
     const { name, password, role } = req.body;
+
+    if (role === 'Director' && name.trim().toLowerCase() !== 'mr. orban') {
+      return res.status(403).json({ message: 'Only Mr. Orban is authorized as Director' });
+    }
 
     // We use name and role to identify the user for login based on the requirements context
     const user = await User.findOne({ name, role });

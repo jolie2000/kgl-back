@@ -1,3 +1,4 @@
+// These routes handle login and user registration.
 const express = require('express');
 const router = express.Router();
 const { registerUser, loginUser } = require('../controllers/authController');

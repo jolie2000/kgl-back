@@ -1,3 +1,4 @@
+// This file creates the default users used to log into the system.
 const mongoose = require('mongoose');
 const axios = require('axios');
 
@@ -20,6 +21,9 @@ mongoose.connect('mongodb://127.0.0.1:27017/kgl_db').then(async () => {
   try {
     await axios.post('http://localhost:5000/api/auth/register', {name: 'Admin Manager', role: 'Manager', branch: 'All', password: 'password123'});
     await axios.post('http://localhost:5000/api/auth/register', {name: 'Agent Sarah', role: 'SalesAgent', branch: 'Maganjo', password: 'password123'});
+    await axios.post('http://localhost:5000/api/auth/register', {name: 'Agent Olah', role: 'SalesAgent', branch: 'Maganjo', password: 'password123'});
+    await axios.post('http://localhost:5000/api/auth/register', {name: 'Agent Peter', role: 'SalesAgent', branch: 'Matugga', password: 'password123'});
+    await axios.post('http://localhost:5000/api/auth/register', {name: 'Agent Elon', role: 'SalesAgent', branch: 'Matugga', password: 'password123'});
     await axios.post('http://localhost:5000/api/auth/register', {name: 'Mr. Orban', role: 'Director', branch: 'All', password: 'password123'});
     console.log('Users seeded successfully');
   } catch (err) {

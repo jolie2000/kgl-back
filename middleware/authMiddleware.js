@@ -1,3 +1,4 @@
+// This file checks login tokens and protects routes by user role.
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
@@ -32,6 +33,14 @@ const managerOnly = (req, res, next) => {
   }
 };
 
+const salesOrManager = (req, res, next) => {
+  if (req.user && (req.user.role === 'SalesAgent' || req.user.role === 'Manager')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Not authorized as Sales Agent or Manager' });
+  }
+};
+
 const directorOnly = (req, res, next) => {
   if (req.user && req.user.role === 'Director') {
     next();
@@ -40,4 +49,13 @@ const directorOnly = (req, res, next) => {
   }
 };
 
-module.exports = { protect, managerOnly, directorOnly };
+const directorMrOrbanOnly = (req, res, next) => {
+  const normalizedName = (req.user?.name || '').trim().toLowerCase();
+  if (req.user && req.user.role === 'Director' && normalizedName === 'mr. orban') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Only Director Mr. Orban can access this resource' });
+  }
+};
+
+module.exports = { protect, managerOnly, salesOrManager, directorOnly, directorMrOrbanOnly };

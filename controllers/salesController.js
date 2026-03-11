@@ -1,41 +1,15 @@
+// This controller handles cash sales and sales history.
 const CashSale = require('../models/CashSale');
-const Procurement = require('../models/Procurement');
+const { reduceStock } = require('../services/stockService');
+const { isAllowedProduce, normalizeProduce } = require('../constants/produce');
 
-// Helper function to handle stock reduction
-const reduceStock = async (produceName, branch, requestedTonnage) => {
-  // Find all procurements for this produce and branch that have some tonnage left
-  const procurements = await Procurement.find({ 
-    produceName, 
-    branch, 
-    tonnage: { $gt: 0 } 
-  }).sort({ date: 1 }); // FIFO
-
-  let totalAvailable = procurements.reduce((sum, p) => sum + p.tonnage, 0);
-
-  if (totalAvailable < requestedTonnage) {
-    throw new Error(`Insufficient stock. Available: ${totalAvailable}kg, Requested: ${requestedTonnage}kg`);
-  }
-
-  let remainingToFulfill = requestedTonnage;
-
-  for (let proc of procurements) {
-    if (remainingToFulfill <= 0) break;
-
-    if (proc.tonnage >= remainingToFulfill) {
-      proc.tonnage -= remainingToFulfill;
-      await proc.save();
-      remainingToFulfill = 0;
-    } else {
-      remainingToFulfill -= proc.tonnage;
-      proc.tonnage = 0;
-      await proc.save();
-    }
-  }
+const parseNumericInput = (value) => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value.replace(/,/g, '').trim());
+  return Number(value);
 };
 
-// @desc    Record a new cash sale
-// @route   POST /api/sales
-// @access  Sales Agent / Manager
+// Record a new cash sale.
 exports.createSale = async (req, res) => {
   try {
     const {
@@ -43,25 +17,35 @@ exports.createSale = async (req, res) => {
       tonnage,
       amountPaid,
       buyerName,
-      salesAgent,
       branch
     } = req.body;
 
-    // 1. Check stock & reduce (Business Rule: Only products in stock should be sold)
-    // 2. Business Rule: Tonnage is reduced upon sale.
-    await reduceStock(produceName, branch, tonnage);
-    
-    // Note: In a real system, we'd also trigger a notification if stock hits 0.
-    // For this scope, the exception thrown in reduceStock or a simple check afterwards is fine.
+    const normalizedProduceName = normalizeProduce(produceName);
+    if (!isAllowedProduce(normalizedProduceName)) {
+      return res.status(400).json({ message: 'Selected produce is not supported for stock sales.' });
+    }
 
-    // 3. Create the sale record
+    const parsedTonnage = parseNumericInput(tonnage);
+    const parsedAmountPaid = parseNumericInput(amountPaid);
+
+    if (!Number.isFinite(parsedTonnage) || !Number.isFinite(parsedAmountPaid)) {
+      return res.status(400).json({ message: 'Please enter valid numeric values for tonnage and amount paid.' });
+    }
+
+    const resolvedBranch = req.user.branch === 'All' ? branch : req.user.branch;
+    const resolvedSalesAgent = req.user.name;
+
+    // Check stock first, then reduce it before saving the sale.
+    await reduceStock(normalizedProduceName, resolvedBranch, parsedTonnage);
+
+    // Save the sale after stock has been updated.
     const sale = new CashSale({
-      produceName,
-      tonnage,
-      amountPaid,
+      produceName: normalizedProduceName,
+      tonnage: parsedTonnage,
+      amountPaid: parsedAmountPaid,
       buyerName,
-      salesAgent,
-      branch
+      salesAgent: resolvedSalesAgent,
+      branch: resolvedBranch
     });
 
     const savedSale = await sale.save();
@@ -74,11 +58,22 @@ exports.createSale = async (req, res) => {
   }
 };
 
-// @desc    Get all cash sales
-// @route   GET /api/sales
+// Get cash sales based on the logged-in user's access.
 exports.getAllSales = async (req, res) => {
   try {
-    const sales = await CashSale.find().sort({ createdAt: -1 });
+    if (!['SalesAgent', 'Manager'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Not authorized to view sales' });
+    }
+
+    const query = {};
+    if (req.user.role === 'SalesAgent') {
+      query.salesAgent = req.user.name;
+      query.branch = req.user.branch;
+    } else if (req.user.branch !== 'All') {
+      query.branch = req.user.branch;
+    }
+
+    const sales = await CashSale.find(query).sort({ createdAt: -1 });
     res.status(200).json(sales);
   } catch (error) {
     res.status(500).json({ message: error.message });

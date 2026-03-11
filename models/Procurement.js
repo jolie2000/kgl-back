@@ -1,10 +1,12 @@
+// This model stores stocked goods and procurement details.
 const mongoose = require('mongoose');
+const { ALLOWED_PRODUCE } = require('../constants/produce');
 
 const procurementSchema = new mongoose.Schema({
   produceName: {
     type: String,
     required: true,
-    match: [/^[a-zA-Z0-9\s]+$/, 'Produce name must be alpha-numeric'],
+    enum: ALLOWED_PRODUCE,
     trim: true
   },
   produceType: {
@@ -25,7 +27,16 @@ const procurementSchema = new mongoose.Schema({
   tonnage: {
     type: Number,
     required: true,
-    min: [100, 'Tonnage minimum length conceptually equivalent to 3 chars']
+    min: [0.01, 'Tonnage must be greater than 0kg'],
+    validate: {
+      validator: function validateIndividualDealerMinimum(value) {
+        if (this.supplierType === 'IndividualDealer') {
+          return value >= 1000;
+        }
+        return true;
+      },
+      message: 'Individual dealers must supply at least 1000kg (1 tonne)'
+    }
   },
   cost: {
     type: Number,
@@ -38,6 +49,12 @@ const procurementSchema = new mongoose.Schema({
     minlength: [2, 'Dealer name must be at least 2 characters'],
     match: [/^[a-zA-Z0-9\s]+$/, 'Dealer name must be alpha-numeric'],
     trim: true
+  },
+  supplierType: {
+    type: String,
+    enum: ['IndividualDealer', 'Company', 'Farm'],
+    required: true,
+    default: 'Company'
   },
   branch: {
     type: String,

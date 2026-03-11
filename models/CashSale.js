@@ -1,16 +1,18 @@
+// This model stores cash sales made by sales agents or managers.
 const mongoose = require('mongoose');
+const { ALLOWED_PRODUCE } = require('../constants/produce');
 
 const cashSaleSchema = new mongoose.Schema({
   produceName: {
     type: String,
     required: true,
-    match: [/^[a-zA-Z0-9\s]+$/, 'Produce name must be alpha-numeric'],
+    enum: ALLOWED_PRODUCE,
     trim: true
   },
   tonnage: {
     type: Number,
     required: true,
-    min: [100, 'Tonnage minimum conceptually 3 digits']
+    min: [0.01, 'Tonnage must be greater than 0kg']
   },
   amountPaid: {
     type: Number,

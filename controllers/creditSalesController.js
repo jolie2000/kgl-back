@@ -1,41 +1,15 @@
+// This controller handles credit sales and credit sales history.
 const CreditSale = require('../models/CreditSale');
-const Procurement = require('../models/Procurement');
+const { reduceStock } = require('../services/stockService');
+const { isAllowedProduce, normalizeProduce } = require('../constants/produce');
 
-// Helper function to handle stock reduction
-const reduceStock = async (produceName, branch, requestedTonnage) => {
-  // Find all procurements for this produce and branch that have some tonnage left
-  const procurements = await Procurement.find({ 
-    produceName, 
-    branch, 
-    tonnage: { $gt: 0 } 
-  }).sort({ date: 1 }); // FIFO
-
-  let totalAvailable = procurements.reduce((sum, p) => sum + p.tonnage, 0);
-
-  if (totalAvailable < requestedTonnage) {
-    throw new Error(`Insufficient stock. Available: ${totalAvailable}kg, Requested: ${requestedTonnage}kg`);
-  }
-
-  let remainingToFulfill = requestedTonnage;
-
-  for (let proc of procurements) {
-    if (remainingToFulfill <= 0) break;
-
-    if (proc.tonnage >= remainingToFulfill) {
-      proc.tonnage -= remainingToFulfill;
-      await proc.save();
-      remainingToFulfill = 0;
-    } else {
-      remainingToFulfill -= proc.tonnage;
-      proc.tonnage = 0;
-      await proc.save();
-    }
-  }
+const parseNumericInput = (value) => {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return Number(value.replace(/,/g, '').trim());
+  return Number(value);
 };
 
-// @desc    Record a new credit sale
-// @route   POST /api/credit-sales
-// @access  Sales Agent / Manager
+// Record a new credit sale.
 exports.createCreditSale = async (req, res) => {
   try {
     const {
@@ -44,7 +18,6 @@ exports.createCreditSale = async (req, res) => {
       location,
       contact,
       amountDue,
-      salesAgent,
       dueDate,
       produceName,
       produceType,
@@ -53,22 +26,37 @@ exports.createCreditSale = async (req, res) => {
       branch
     } = req.body;
 
-    // Credit sales also require stock to be reduced
-    await reduceStock(produceName, branch, tonnage);
+    const normalizedProduceName = normalizeProduce(produceName);
+    if (!isAllowedProduce(normalizedProduceName)) {
+      return res.status(400).json({ message: 'Selected produce is not supported for credit sales.' });
+    }
+
+    const parsedTonnage = parseNumericInput(tonnage);
+    const parsedAmountDue = parseNumericInput(amountDue);
+
+    if (!Number.isFinite(parsedTonnage) || !Number.isFinite(parsedAmountDue)) {
+      return res.status(400).json({ message: 'Please enter valid numeric values for tonnage and amount due.' });
+    }
+
+    const resolvedBranch = req.user.branch === 'All' ? branch : req.user.branch;
+    const resolvedSalesAgent = req.user.name;
+
+    // Credit sales also reduce stock before the sale is saved.
+    await reduceStock(normalizedProduceName, resolvedBranch, parsedTonnage);
 
     const creditSale = new CreditSale({
       buyerName,
       nationalId,
       location,
       contact,
-      amountDue,
-      salesAgent,
+      amountDue: parsedAmountDue,
+      salesAgent: resolvedSalesAgent,
       dueDate,
-      produceName,
+      produceName: normalizedProduceName,
       produceType,
-      tonnage,
+      tonnage: parsedTonnage,
       dispatchDate,
-      branch
+      branch: resolvedBranch
     });
 
     const savedCreditSale = await creditSale.save();
@@ -81,11 +69,22 @@ exports.createCreditSale = async (req, res) => {
   }
 };
 
-// @desc    Get all credit sales
-// @route   GET /api/credit-sales
+// Get credit sales based on the logged-in user's access.
 exports.getAllCreditSales = async (req, res) => {
   try {
-    const creditSales = await CreditSale.find().sort({ createdAt: -1 });
+    if (!['SalesAgent', 'Manager'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Not authorized to view credit sales' });
+    }
+
+    const query = {};
+    if (req.user.role === 'SalesAgent') {
+      query.salesAgent = req.user.name;
+      query.branch = req.user.branch;
+    } else if (req.user.branch !== 'All') {
+      query.branch = req.user.branch;
+    }
+
+    const creditSales = await CreditSale.find(query).sort({ createdAt: -1 });
     res.status(200).json(creditSales);
   } catch (error) {
     res.status(500).json({ message: error.message });
